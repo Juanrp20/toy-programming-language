@@ -1,16 +1,15 @@
 ```ebnf
-<Program> -> { <FuncDecl> } <MainCall>
-<MainCall> -> "func" "main" "(" ")" <Block> "end" "main" "(" ")"
+<Program>  -> "func" <FuncRest>
+<FuncRest> -> "main" "(" ")" <Block> "end" "main" "(" ")"
+             | ID "(" [ <ParamList> ] ")" <Block> "end" <Program>
 
-<FuncDecl> -> "func" ID "(" [ <ParamList> ] ")" <Block> "end"
 <ParamList> -> ID { "," ID }
-<Block> -> { <Statement> }
+<Block>    -> { <Statement> } [ <RetStmt> ]
 
 <Statement> -> <IfStmt> 
               | <WhileStmt> 
               | <ForStmt> 
               | <PrintStmt> 
-              | <RetStmt> 
               | <LocalStmt>
               | ID <IdTail>
 
