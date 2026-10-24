@@ -436,7 +436,7 @@ def detectar_conflictos_original(texto):
 
 def main():
     if len(sys.argv) < 2:
-        print("Uso: python ll1_check.py archivo_gramatica.txt [--sets]")
+        print("Uso: python -m toy.ll1_check gramatica/toy_gramatica.txt [--sets]")
         return
     filename = sys.argv[1]
     with open(filename, "r", encoding="utf-8") as f:

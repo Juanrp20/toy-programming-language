@@ -1,6 +1,6 @@
 # toy_parser.py
 import sys
-from toy_lexer import Lexer, Token, LexError, TOK_EOF
+from toy.lexer import Lexer, Token, LexError, TOK_EOF
 
 
 class SyntaxErr(Exception):
@@ -331,7 +331,7 @@ class Parser:
 
 def main():
     if len(sys.argv) < 2:
-        print("Uso: python toy_parser.py archivo.toy [--tokens] [--ast]")
+        print("Uso: python -m toy.parser archivo.toy [--tokens] [--ast]")
         return
     filename = sys.argv[1]
     with open(filename, "r", encoding="utf-8") as f:
