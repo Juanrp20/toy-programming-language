@@ -1,0 +1,52 @@
+```ebnf
+<Program> -> { <FuncDecl> } <MainCall>
+<MainCall> -> "func" "main" "(" ")" <Block> "end" "main" "(" ")"
+
+<FuncDecl> -> "func" ID "(" [ <ParamList> ] ")" <Block> "end"
+<ParamList> -> ID { "," ID }
+<Block> -> { <Statement> }
+
+<Statement> -> <IfStmt> 
+              | <WhileStmt> 
+              | <ForStmt> 
+              | <PrintStmt> 
+              | <RetStmt> 
+              | <LocalStmt>
+              | ID <IdTail>
+
+<IdTail> -> ":=" <Expr>            -- Asignación
+           | "(" [ <ArgList> ] ")"  -- Llamada a función
+
+<ArgList> -> <Expr> { "," <Expr> }
+<LocalStmt> -> "local" ID ":=" <Expr>
+<RetStmt> -> "ret" [ <Expr> ]
+
+<IfStmt> -> "if" <Expr> "then" <Block> [ "else" <Block> ] "end"
+<WhileStmt> -> "while" <Expr> "do" <Block> "end"
+<ForStmt> -> "for" ID ":=" <Expr> "," <Expr> [ "," <Expr> ] "do" <Block> "end"
+<PrintStmt> -> ( "print" | "println" ) <Expr>
+
+<Expr> -> <OrExpr> 
+
+<OrExpr> -> <AndExpr> { "or" <AndExpr> }
+<AndExpr> -> <EqExpr> { "and" <EqExpr> }
+<EqExpr> -> <RelExpr> { ( "==" | "~=" ) <RelExpr> }
+<RelExpr> -> <AddExpr> { ( "<" | "<=" | ">" | ">=" ) <AddExpr> }
+<AddExpr> -> <MultExpr> { ( "+" | "-" ) <MultExpr> }
+<MultExpr> -> <ModExpr> { ( "*" | "/" ) <ModExpr> }
+<ModExpr> -> <UnaryExpr> { "%" <UnaryExpr> }
+
+<UnaryExpr> -> "-" <UnaryExpr> 
+              | "~" <UnaryExpr> 
+              | <ExpExpr>
+
+-- Asociatividad por la derecha para la exponenciación
+<ExpExpr> -> <Primary> [ "^" <UnaryExpr> ] 
+
+<Primary> -> NUMBER 
+            | STRING 
+            | "true" 
+            | "false" 
+            | "(" <Expr> ")"
+            | ID [ "(" [ <ArgList> ] ")" ]
+```
