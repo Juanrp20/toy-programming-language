@@ -1,20 +1,10 @@
 # run_tests.py
-import os
 import sys
 from pathlib import Path
-import subprocess
 
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-
-
-def run_cmd(cmd):
-    try:
-        res = subprocess.run(cmd, shell=False, cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
-        return res.returncode, res.stdout.decode('utf-8', errors='replace'), res.stderr.decode('utf-8', errors='replace')
-    except Exception as e:
-        return -1, "", str(e)
 
 
 def test_lexer_basicos():
@@ -181,71 +171,190 @@ def test_parser_invalidos():
         raise AssertionError("debería fallar operador sin operando")
     except (LexError, SyntaxErr):
         pass
+
+    programas_rechazados = [
+        "func main()\nend",
+        "func main()\nend foo",
+        "func f()\nend f\nfunc main()\nend main()",
+        "func main()\nend main()\nfunc g()\nend",
+    ]
+    for prog in programas_rechazados:
+        try:
+            Parser(Lexer(prog)).parse()
+            raise AssertionError(f"debería rechazarse programa inválido:\n{prog}")
+        except (LexError, SyntaxErr):
+            pass
+
+    prog_aceptado = "func f()\nend\nfunc main()\nend main()"
+    ast_aceptado = Parser(Lexer(prog_aceptado)).parse()
+    assert ast_aceptado is not None and ast_aceptado[0] == "program"
+
     print("OK parser_invalidos")
 
 
 def test_ll1():
-    from toy.ll1_check import verificar
+    from toy.ll1_check import verificar, calcular_conjuntos
     orig = ROOT / "gramatica" / "toy_gramatica_original.txt"
     corr = ROOT / "gramatica" / "toy_gramatica.txt"
+
+    with open(corr, 'r', encoding='utf-8') as f:
+        texto_corr = f.read()
+    anulables, primero, siguiente = calcular_conjuntos(texto_corr)
+
+    assert set(primero['<AddExpr>']) == {'"("', '"-"', '"false"', '"true"', '"~"', 'ID', 'NUMBER', 'STRING'}
+    assert set(primero['<ArgList>']) == {'"("', '"-"', '"false"', '"true"', '"~"', 'ID', 'NUMBER', 'STRING'}
+    assert set(siguiente['<ArgList>']) == {'")"'}
+    assert set(primero['<Block>']) == {'"for"', '"if"', '"local"', '"print"', '"println"', '"ret"', '"while"', 'ID'}
+    assert '<Block>' in anulables
+    assert set(siguiente['<Block>']) == {'"else"', '"end"'}
+
     confs_orig = verificar(orig)
     assert len(confs_orig) == 2, f"esperados 2 conflictos, got {len(confs_orig)}"
     confs_corr = verificar(corr)
     assert len(confs_corr) == 0, f"esperados 0 conflictos, got {len(confs_corr)}"
-    # caso a
-    txt_a = "<Program> -> <L> ID\n<L> -> { ID }"
-    from toy.ll1_check import Exp, A2
-    exp = Exp(txt_a)
-    reglas = []
-    for izq, alts in exp.reglas:
-        bnf_alts = []
-        for alt in alts:
-            bnf_alts.append([x for x in alt if x is not None])
-        reglas.append((izq, bnf_alts))
-    a = A2(reglas)
-    a.calc()
-    confs_a = a.conflictos()
-    assert len(confs_a) >= 1
-    # caso b
-    txt_b = "<Program> -> <E>\n<E> -> <T> { \"+\" <T> }\n<T> -> ID | \"(\" <E> \")\" | ID \"(\" <E> \")\""
-    confs_b = verificar(txt_b)
-    assert any(c['no_terminal'] == '<T>' for c in confs_b) and any('ID' in c['interseccion'] for c in confs_b)
-    # caso c
-    from toy.ll1_check import Exp, A2
-    with open(corr, 'r', encoding='utf-8') as f:
-        texto_c = f.read()
-    exp = Exp(texto_c)
-    reglas = []
-    for izq, alts in exp.reglas:
-        bnf_alts = []
-        for alt in alts:
-            bnf_alts.append([x for x in alt if x is not None])
-        reglas.append((izq, bnf_alts))
-    a = A2(reglas)
-    a.calc()
-    a.primero['<Primary>'] = {'NUMBER','STRING','"true"','"false"','"("','ID'}
-    a.primero['<ExpExpr>'] = a.primero['<Primary>']
-    a.primero['<UnaryExpr>'] = {'"-"','"~"'} | a.primero['<ExpExpr>']
-    a.primero['<ModExpr>'] = a.primero['<UnaryExpr>']
-    a.primero['<MultExpr>'] = a.primero['<ModExpr>']
-    a.primero['<AddExpr>'] = a.primero['<MultExpr>']
-    a.primero['<RelExpr>'] = a.primero['<AddExpr>']
-    a.primero['<EqExpr>'] = a.primero['<RelExpr>']
-    a.primero['<AndExpr>'] = a.primero['<EqExpr>']
-    a.primero['<OrExpr>'] = a.primero['<AndExpr>']
-    a.primero['<Expr>'] = a.primero['<OrExpr>']
-    a.primero['<ArgList>'] = a.primero['<Expr>']
-    a.primero['<Statement>'] = {'"if"','"while"','"for"','"print"','"println"','"local"','ID'}
-    a.primero['<Block>'] = a.primero['<Statement>'] | {'"ret"'}
-    a.siguiente['<ArgList>'] = {')'}
-    a.siguiente['<Block>'] = {'"else"','"end"'}
-    assert set(a.primero['<AddExpr>']) == {'"("', '"-"', '"false"', '"true"', '"~"', 'ID', 'NUMBER', 'STRING'}
-    assert set(a.primero['<ArgList>']) == {'"("', '"-"', '"false"', '"true"', '"~"', 'ID', 'NUMBER', 'STRING'}
-    assert set(a.siguiente['<ArgList>']) == {')'}
-    assert set(a.primero['<Block>']) == {'"for"', '"if"', '"local"', '"print"', '"println"', '"ret"', '"while"', 'ID'}
-    assert '<Block>' in a.anulable
-    assert set(a.siguiente['<Block>']) == {'"else"', '"end"'}
+
+    c_l = verificar("<Program> -> <L> ID\n<L> -> { ID }")
+    assert len(c_l) >= 1
+
+    c_opt = verificar("<Program> -> [ ID ] ID")
+    assert len(c_opt) >= 1
+
+    c_paren = verificar('<Program> -> ( ID | ID "x" )')
+    assert len(c_paren) >= 1
+
+    c_a = verificar('<Program> -> <A>\n<A> -> "a" | "a" "b"')
+    assert len(c_a) == 1
+
+    corr_con_ret = texto_corr.replace("<Statement> -> <IfStmt>", "<Statement> -> <RetStmt> | <IfStmt>")
+    c_ret = verificar(corr_con_ret)
+    assert len(c_ret) >= 1
+
+    with open(orig, 'r', encoding='utf-8') as f:
+        texto_orig = f.read()
+    orig_sin_espacios = texto_orig.replace('{ <FuncDecl> }', '{<FuncDecl>}').replace('| <RetStmt>', '|<RetStmt>')
+    c_orig_sin = verificar(orig_sin_espacios)
+    assert len(c_orig_sin) == 2
+
     print("OK ll1")
+
+
+def test_afd_especificacion():
+    doc_path = ROOT / "docs" / "especificacion_y_diseno_formal_del_lenguaje_toy.md"
+    with open(doc_path, "r", encoding="utf-8") as f:
+        md_text = f.read()
+
+    table_lines = []
+    in_table = False
+    for line in md_text.splitlines():
+        if "Tabla de Transiciones" in line:
+            in_table = True
+            continue
+        if in_table:
+            sline = line.strip()
+            if sline.startswith("|"):
+                table_lines.append(sline)
+            elif table_lines:
+                break
+
+    header = [c.strip(" `") for c in table_lines[0].split("|")[1:-1]]
+    table = {}
+    for line in table_lines[2:]:
+        cells = [c.strip() for c in line.split("|")[1:-1]]
+        state = cells[0].split()[0].rstrip("*")
+        table[state] = {}
+        for col_name, cell in zip(header[1:], cells[1:]):
+            table[state][col_name] = cell
+
+    def char_to_col(c):
+        if c == '"':
+            return "DQ"
+        if c == "'":
+            return "SQ"
+        if c == "\n":
+            return "\\n"
+        if c in " \t\r\v\f":
+            return "Blanco"
+        if c in "+-=~:><.":
+            return c
+        if c.isdigit():
+            return "Dígito"
+        if c.isalpha() or c == "_":
+            return "Letra"
+        if c in "*/%^(),":
+            return "Símb."
+        return "Otro"
+
+    def simulate(s):
+        state = "S0"
+        for c in s:
+            col = char_to_col(c)
+            next_state = table.get(state, {}).get(col, "STOP")
+            if next_state == "STOP":
+                return state, False
+            state = next_state
+        return state, True
+
+    casos = [
+        (":=", "S12"),
+        ("==", "S10"),
+        ("~=", "S11"),
+        ("-", "S4"),
+        ("--c", "S9"),
+        (">=", "S16"),
+        ("<=", "S18"),
+        ("+", "S19"),
+        ("x", "S1"),
+        ("42", "S2"),
+        ("3.14", "S14"),
+        ('"hola"', "S8"),
+    ]
+
+    for inp, expected in casos:
+        st, ok = simulate(inp)
+        assert st == expected, f"Simulación AFD falló en {inp!r}: estado={st}, esperado={expected}"
+
+    print("OK afd_especificacion")
+
+
+def test_apendice_gramatica_original():
+    from toy.ll1_check import EBNFParser
+    doc_path = ROOT / "docs" / "gramatica_formal_del_lenguaje_toy.md"
+    txt_path = ROOT / "gramatica" / "toy_gramatica_original.txt"
+
+    with open(doc_path, "r", encoding="utf-8") as f:
+        doc = f.read()
+    with open(txt_path, "r", encoding="utf-8") as f:
+        txt = f.read()
+
+    assert "# Apéndice: versión original (no LL(1))" in doc
+    part = doc.split("# Apéndice: versión original (no LL(1))")[1]
+    start = part.find("```ebnf")
+    end = part.find("```", start + 7)
+    ebnf_content = part[start + 7:end].strip()
+
+    toks_doc = EBNFParser(ebnf_content).tokenize()
+    toks_txt = EBNFParser(txt).tokenize()
+
+    assert toks_doc == toks_txt, f"Tokens no coinciden: {len(toks_doc)} vs {len(toks_txt)}"
+    print("OK apendice_gramatica_original")
+
+
+def test_readme_ejemplo():
+    from toy.lexer import Lexer
+    from toy.parser import Parser
+    readme_path = ROOT / "README.md"
+    with open(readme_path, "r", encoding="utf-8") as f:
+        readme = f.read()
+
+    start = readme.find("```toy")
+    assert start != -1, "No se encontró bloque ```toy en README.md"
+    end = readme.find("```", start + 6)
+    assert end != -1, "Bloque ```toy no está cerrado"
+    code = readme[start + 6:end].strip()
+
+    ast = Parser(Lexer(code)).parse()
+    assert ast is not None and ast[0] == "program"
+    print("OK readme_ejemplo")
 
 
 def main():
@@ -255,6 +364,9 @@ def main():
     test_precedencia()
     test_parser_invalidos()
     test_ll1()
+    test_afd_especificacion()
+    test_apendice_gramatica_original()
+    test_readme_ejemplo()
     print("\nTODAS LAS PRUEBAS PASARON")
     sys.exit(0)
 

@@ -8,7 +8,7 @@ Toy es un lenguaje didáctico creado para el curso de Compiladores. El objetivo 
 -- programa completo de prueba
 func suma(a,b)
   ret a+b
-end suma
+end
 
 func main()
   local x := 5
@@ -55,7 +55,7 @@ Explicación breve: el programa define funciones en ámbito global, termina con 
 ## Fases del compilador
 
 **Implementadas:**
-- Analizador léxico (basado en AFD).
+- Analizador léxico escrito a mano, equivalente al AFD documentado en docs/.
 - Analizador sintáctico descendente recursivo LL(1) que construye un AST.
 
 **No implementadas:**
@@ -122,14 +122,14 @@ python tests/run_tests.py
 
 | Punto | Cambio |
 |---|---|
-| A1 - Conflicto 1 | Se reemplaza `<Program> -> { <FuncDecl> } <MainCall>` por `<Program> -> "func" <FuncRest>` con `<FuncRest>` factorizado entre `main` y función con ID. |
-| A1 - Conflicto 2 | Se elimina `<RetStmt>` de `<Statement>` y se pasa a `<Block> -> { <Statement> } [ <RetStmt> ]`. `ret` solo puede aparecer como última instrucción del bloque. |
-| A1 - Documentación | Se actualizan secciones en docs/gramatica_formal_del_lenguaje_toy.md, se agrega "Verificación LL(1)" y apéndice con gramática original (no LL(1)). |
-| A2 - Tokens | Se agrega `TOK-MAIN`. Se renombran `number/string/bool` a `TOK-KW-NUMBER/TOK-KW-STRING/TOK-KW-BOOL` (los literales siguen siendo `TOK-NUMBER`/`TOK-STRING`). |
-| A2 - Léxico | Letra = [a-zA-Z_] completo. Se elimina Exponente. Se agrega Punto `[.]`. Blanco = espacio,\t,\r,\v,\f (sin `\n`). Se separan comillas en DQ/SQ. Se agregan `:` y `.` al alfabeto. |
-| A2 - Números/Cadenas | Números: dígitos+ opcionalmente seguidos de "." y dígitos+ (3.14 válido; "5." es error). Cadenas con misma comilla, sin salto de línea. |
-| A2 - AFD | Se completa tabla en docs/especificacion_y_diseno_formal_del_lenguaje_toy.md. |
-| A2 - Notas | Se agregan notas de diseño (precedencia de `%`, distinción palabras reservadas/identificadores, maximal munch). |
+| Conflicto en <Program> | Se reemplaza `<Program> -> { <FuncDecl> } <MainCall>` por `<Program> -> "func" <FuncRest>` con `<FuncRest>` factorizado entre `main` y función con ID. |
+| Conflicto en <RetStmt> | Se elimina `<RetStmt>` de `<Statement>` y se pasa a `<Block> -> { <Statement> } [ <RetStmt> ]`. `ret` solo puede aparecer como última instrucción del bloque. |
+| Documentación | Se actualizan secciones en docs/gramatica_formal_del_lenguaje_toy.md, se agrega "Verificación LL(1)" y apéndice con gramática original (no LL(1)). |
+| Tokens | Se agrega `TOK-MAIN`. Se renombran `number/string/bool` a `TOK-KW-NUMBER/TOK-KW-STRING/TOK-KW-BOOL` (los literales siguen siendo `TOK-NUMBER`/`TOK-STRING`). |
+| Léxico | Letra = [a-zA-Z_] completo. Se elimina Exponente. Se agrega Punto `[.]`. Blanco = espacio,\t,\r,\v,\f (sin `\n`). Se separan comillas en DQ/SQ. Se agregan `:` y `.` al alfabeto. |
+| Números y cadenas | Números: dígitos+ opcionalmente seguidos de "." y dígitos+ (3.14 válido; "5." es error). Cadenas con misma comilla, sin salto de línea. |
+| AFD | Se completa tabla en docs/especificacion_y_diseno_formal_del_lenguaje_toy.md. |
+| Notas de diseño | Se agregan notas de diseño (precedencia de `%`, distinción palabras reservadas/identificadores, maximal munch). |
 
 ## Decisiones de diseño y pendientes
 

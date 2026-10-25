@@ -1,386 +1,338 @@
-# toy/ll1_check.py
 import sys
 from pathlib import Path
 
 
-class Tok:
-    def __init__(self, t, v=None):
-        self.t = t
-        self.v = v
+class EBNFParser:
+    def __init__(self, text):
+        self.text = text
+        self.aux_counters = {}
+        self.rules = []
+        self.aux_rules = []
+
+    def make_aux(self, orig_lhs):
+        base = orig_lhs.strip("<>").split("_aux")[0]
+        self.aux_counters[base] = self.aux_counters.get(base, 0) + 1
+        return f"<{base}_aux{self.aux_counters[base]}>"
+
+    def tokenize(self):
+        tokens = []
+        for line in self.text.splitlines():
+            if "--" in line:
+                line = line[:line.find("--")]
+            i = 0
+            n = len(line)
+            while i < n:
+                c = line[i]
+                if c.isspace():
+                    i += 1
+                    continue
+                if line[i:i + 2] == "->":
+                    tokens.append(("ARROW", "->"))
+                    i += 2
+                    continue
+                if c in "{}[]()|":
+                    tokens.append((c, c))
+                    i += 1
+                    continue
+                if c == "<":
+                    j = line.find(">", i)
+                    if j == -1:
+                        j = n
+                    tokens.append(("NT", line[i:j + 1]))
+                    i = j + 1
+                    continue
+                if c == '"':
+                    j = line.find('"', i + 1)
+                    if j == -1:
+                        j = n - 1
+                    tokens.append(("T", line[i:j + 1]))
+                    i = j + 1
+                    continue
+                if c == "'":
+                    j = line.find("'", i + 1)
+                    if j == -1:
+                        j = n - 1
+                    tokens.append(("T", '"' + line[i + 1:j] + '"'))
+                    i = j + 1
+                    continue
+                if c.isalnum() or c == "_":
+                    j = i
+                    while j < n and (line[j].isalnum() or line[j] == "_"):
+                        j += 1
+                    tokens.append(("ID", line[i:j]))
+                    i = j
+                    continue
+                tokens.append(("T", c))
+                i += 1
+        return tokens
+
+    def parse(self):
+        tokens = self.tokenize()
+        rule_starts = []
+        for i in range(len(tokens) - 1):
+            if tokens[i][0] == "NT" and tokens[i + 1][0] == "ARROW":
+                rule_starts.append(i)
+
+        parsed_rules = []
+        for idx, start_i in enumerate(rule_starts):
+            end_i = rule_starts[idx + 1] if idx + 1 < len(rule_starts) else len(tokens)
+            lhs = tokens[start_i][1]
+            rhs_tokens = tokens[start_i + 2: end_i]
+            parsed_rules.append((lhs, rhs_tokens))
+
+        rules_dict = {}
+        rule_order = []
+        self.aux_rules = []
+
+        for lhs, rhs_tokens in parsed_rules:
+            if lhs not in rules_dict:
+                rules_dict[lhs] = []
+                rule_order.append(lhs)
+            alts = self._parse_rhs(lhs, rhs_tokens)
+            rules_dict[lhs].extend(alts)
+
+        final_rules = [(nt, rules_dict[nt]) for nt in rule_order]
+        final_rules.extend(self.aux_rules)
+        return final_rules
+
+    def _parse_rhs(self, orig_lhs, tokens):
+        pos = [0]
+
+        def cur():
+            return tokens[pos[0]] if pos[0] < len(tokens) else ("EOF", "")
+
+        def eat(expected=None):
+            t = cur()
+            pos[0] += 1
+            return t
+
+        def parse_expr():
+            alts = [parse_seq()]
+            while cur()[0] == "|":
+                eat("|")
+                alts.append(parse_seq())
+            return alts
+
+        def parse_seq():
+            seq = []
+            while cur()[0] not in ("EOF", "|", "}", "]", ")"):
+                f = parse_factor()
+                if f is not None:
+                    seq.append(f)
+            return seq
+
+        def parse_factor():
+            t = cur()
+            if t[0] == "{":
+                eat("{")
+                inner = parse_expr()
+                eat("}")
+                aux_nt = self.make_aux(orig_lhs)
+                aux_alts = []
+                for alt in inner:
+                    aux_alts.append(alt + [aux_nt])
+                aux_alts.append([])
+                self.aux_rules.append((aux_nt, aux_alts))
+                return aux_nt
+            elif t[0] == "[":
+                eat("[")
+                inner = parse_expr()
+                eat("]")
+                aux_nt = self.make_aux(orig_lhs)
+                aux_alts = []
+                for alt in inner:
+                    aux_alts.append(list(alt))
+                aux_alts.append([])
+                self.aux_rules.append((aux_nt, aux_alts))
+                return aux_nt
+            elif t[0] == "(":
+                eat("(")
+                inner = parse_expr()
+                eat(")")
+                aux_nt = self.make_aux(orig_lhs)
+                aux_alts = []
+                for alt in inner:
+                    aux_alts.append(list(alt))
+                self.aux_rules.append((aux_nt, aux_alts))
+                return aux_nt
+            elif t[0] == "NT":
+                eat("NT")
+                return t[1]
+            elif t[0] in ("T", "ID"):
+                eat()
+                return t[1]
+            else:
+                eat()
+                return None
+
+        return parse_expr()
 
 
-class Lex:
-    def __init__(self, s):
-        self.s = s
-        self.i = 0
-        self.n = len(s)
+class LL1Calculator:
+    def __init__(self, rules):
+        self.rules = rules
+        self.non_terminals = set(r[0] for r in rules)
+        self.nullable = set()
+        self.first = {nt: set() for nt in self.non_terminals}
+        self.follow = {nt: set() for nt in self.non_terminals}
 
-    def lex(self):
-        out = []
-        while self.i < self.n:
-            c = self.s[self.i]
-            if c.isspace():
-                self.i += 1
-                continue
-            if c == '-' and self.i+1 < self.n and self.s[self.i+1] == '-':
-                while self.i < self.n and self.s[self.i] != '\n':
-                    self.i += 1
-                continue
-            if c == '<':
-                self.i += 1
-                j = self.i
-                while self.i < self.n and self.s[self.i] != '>':
-                    self.i += 1
-                out.append(Tok('NT', '<' + self.s[j:self.i] + '>'))
-                self.i += 1
-                continue
-            if c == '"':
-                self.i += 1
-                j = self.i
-                while self.i < self.n and self.s[self.i] != '"':
-                    self.i += 1
-                out.append(Tok('T', '"' + self.s[j:self.i] + '"'))
-                self.i += 1
-                continue
-            if c == '{':
-                self.i += 1; out.append(Tok('{')); continue
-            if c == '}':
-                self.i += 1; out.append(Tok('}')); continue
-            if c == '[':
-                self.i += 1; out.append(Tok('[')); continue
-            if c == ']':
-                self.i += 1; out.append(Tok(']')); continue
-            if c == '(':
-                self.i += 1; out.append(Tok('(')); continue
-            if c == ')':
-                self.i += 1; out.append(Tok(')')); continue
-            if c == '|':
-                self.i += 1; out.append(Tok('|')); continue
-            if c.isupper() or c == '_':
-                j = self.i
-                while self.i < self.n and (self.s[self.i].isalnum() or self.s[self.i] == '_'):
-                    self.i += 1
-                out.append(Tok('IDT', self.s[j:self.i]))
-                continue
-            self.i += 1
-        return out
-
-
-class P:
-    def __init__(self, t):
-        self.t = t; self.i = 0
-    def cur(self):
-        if self.i < len(self.t): return self.t[self.i]
-        return Tok('EOF')
-    def eat(self, x=None):
-        cur = self.cur(); self.i += 1; return cur
-
-
-class Exp:
-    def __init__(self, txt):
-        self.txt = txt
-        self.reglas = []
-        self.c = 0
-        self._leer()
-    def nn(self):
-        self.c += 1
-        return f'<aux{self.c}>'
-    def _leer(self):
-        for line in self.txt.splitlines():
-            if '--' in line:
-                line = line[:line.find('--')]
-            if '->' not in line:
-                continue
-            izq, der = line.split('->', 1)
-            izq = izq.strip()
-            if not (izq.startswith('<') and izq.endswith('>')):
-                continue
-            toks = Lex(der).lex()
-            p = P(toks)
-            alts = self._alts(p)
-            self.reglas.append((izq, alts))
-    def _alts(self, p):
-        res = []; cur = []
-        while p.cur().t != 'EOF':
-            if p.cur().t == '|':
-                p.eat('|'); res.append(cur); cur = []; continue
-            cur.append(self._factor(p))
-        if cur or not res: res.append(cur)
+    def first_seq(self, seq):
+        res = set()
+        for sym in seq:
+            if sym in self.non_terminals:
+                res |= self.first[sym]
+                if sym not in self.nullable:
+                    break
+            else:
+                res.add(sym)
+                break
         return res
-    def _factor(self, p):
-        t = p.cur()
-        if t.t == '{':
-            p.eat('{'); contenido = self._alts(p); p.eat('}')
-            nt = self.nn()
-            alt_rec = []
-            for alt in contenido:
-                for a in alt:
-                    if isinstance(a, list): alt_rec.extend(a)
-                    elif a is not None: alt_rec.append(a)
-            alt_rec.append(('NT', nt))
-            self.reglas.append((nt, [[], alt_rec]))
-            return ('NT', nt)
-        if t.t == '[':
-            p.eat('['); contenido = self._alts(p); p.eat(']')
-            nt = self.nn()
-            alt_c = []
-            for alt in contenido:
-                for a in alt:
-                    if isinstance(a, list): alt_c.extend(a)
-                    elif a is not None: alt_c.append(a)
-            self.reglas.append((nt, [[], alt_c]))
-            return ('NT', nt)
-        if t.t == '(':
-            p.eat('('); contenido = self._alts(p); p.eat(')')
-            nt = self.nn()
-            bnf_alts = []
-            for alt in contenido:
-                seq = []
-                for a in alt:
-                    if isinstance(a, list): seq.extend(a)
-                    elif a is not None: seq.append(a)
-                bnf_alts.append(seq)
-            self.reglas.append((nt, bnf_alts))
-            return ('NT', nt)
-        if t.t == 'NT': p.eat(); return ('NT', t.v)
-        if t.t == 'T': p.eat(); return ('T', t.v)
-        if t.t == 'IDT': p.eat(); return ('I', t.v)
-        p.eat(); return None
 
+    def is_seq_nullable(self, seq):
+        return all(sym in self.nullable for sym in seq)
 
-class A2:
-    def __init__(self, reglas):
-        self.reglas = reglas
-        self.no_terminales = set(r[0] for r in reglas)
-        self.primero = {nt: set() for nt in self.no_terminales}
-        self.siguiente = {nt: set() for nt in self.no_terminales}
-        self.anulable = set()
-    def symstr(self, s):
-        if isinstance(s, tuple):
-            if s[0] in ['T','I','NT']: return s[1]
-        if isinstance(s,str): return s
-        return s
-    def es_nt(self,s):
-        if isinstance(s,tuple) and s[0]=='NT': return True
-        if isinstance(s,str) and s.startswith('<') and s.endswith('>'): return True
-        return False
-    def es_term(self,s):
-        if isinstance(s,tuple):
-            if s[0]=='NT': return False
-            if s[0] in ['T','I']: return True
-        if isinstance(s,str):
-            if s.startswith('<') and s.endswith('>'): return False
-            if s in ['ID','NUMBER','STRING','ε','$']: return True
-            if s.startswith('"'): return True
-        return True
-    def calc(self):
-        ch=True
-        while ch:
-            ch=False
-            for izq,alts in self.reglas:
-                if izq in self.anulable: continue
+    def calculate(self):
+        changed = True
+        while changed:
+            changed = False
+            for lhs, alts in self.rules:
+                if lhs in self.nullable:
+                    continue
                 for alt in alts:
-                    if not alt:
-                        if izq not in self.anulable: self.anulable.add(izq); ch=True
+                    if self.is_seq_nullable(alt):
+                        self.nullable.add(lhs)
+                        changed = True
                         break
-                    ok=True
-                    for s in alt:
-                        ss=self.symstr(s)
-                        if ss=='ε': continue
-                        if self.es_nt(s):
-                            if ss not in self.anulable: ok=False; break
-                        elif self.es_term(s): 
-                            ok=False; break
-                    if ok:
-                        if izq not in self.anulable: self.anulable.add(izq); ch=True
-                        break
-        ch=True
-        while ch:
-            ch=False
-            for izq,alts in self.reglas:
+
+        changed = True
+        while changed:
+            changed = False
+            for lhs, alts in self.rules:
                 for alt in alts:
-                    for s in alt:
-                        ss=self.symstr(s)
-                        if ss=='ε':
-                            if 'ε' not in self.primero[izq]: self.primero[izq].add('ε'); ch=True
-                            break
-                        if self.es_term(s) and not self.es_nt(s):
-                            if ss not in self.primero[izq]: self.primero[izq].add(ss); ch=True
-                            break
-                        if self.es_nt(s):
-                            antes=len(self.primero[izq])
-                            for p in self.primero.get(ss,set()):
-                                if p!='ε': self.primero[izq].add(p)
-                            if len(self.primero[izq])!=antes: ch=True
-                            if ss in self.anulable: continue
-                            else: break
-                    else:
-                        for s in alt:
-                            ss=self.symstr(s)
-                            if ss=='ε':
-                                if 'ε' not in self.primero[izq]: self.primero[izq].add('ε'); ch=True
-                            elif self.es_nt(s) and ss in self.anulable: continue
-        self.siguiente={nt:set() for nt in self.no_terminales}
-        for r in self.reglas:
-            if r[0].startswith('<Program>'): self.siguiente[r[0]].add('$'); break
-        ch=True
-        while ch:
-            ch=False
-            for izq,alts in self.reglas:
+                    f = self.first_seq(alt)
+                    if not f.issubset(self.first[lhs]):
+                        self.first[lhs] |= f
+                        changed = True
+
+        if self.rules:
+            self.follow[self.rules[0][0]].add("$")
+        changed = True
+        while changed:
+            changed = False
+            for lhs, alts in self.rules:
                 for alt in alts:
-                    for i,s in enumerate(alt):
-                        if not self.es_nt(s): continue
-                        ss=self.symstr(s)
-                        resto=alt[i+1:]
-                        todonul=True
-                        for t in resto:
-                            tss=self.symstr(t)
-                            if tss=='ε': continue
-                            if self.es_term(t) and not self.es_nt(t):
-                                if tss not in self.siguiente[ss]: self.siguiente[ss].add(tss); ch=True
-                                todonul=False; break
-                            if self.es_nt(t):
-                                antes=len(self.siguiente[ss])
-                                for p in self.primero.get(tss,set()):
-                                    if p!='ε': self.siguiente[ss].add(p)
-                                if len(self.siguiente[ss])!=antes: ch=True
-                                if tss in self.anulable: continue
-                                else: todonul=False; break
-                        if todonul or not resto:
-                            antes=len(self.siguiente[ss])
-                            for x in self.siguiente[izq]: self.siguiente[ss].add(x)
-                            if len(self.siguiente[ss])!=antes: ch=True
-    def conflictos(self):
-        confs=[]
-        for izq,alts in self.reglas:
-            sels=[]
+                    for i, sym in enumerate(alt):
+                        if sym in self.non_terminals:
+                            beta = alt[i + 1:]
+                            f_beta = self.first_seq(beta)
+                            if not f_beta.issubset(self.follow[sym]):
+                                self.follow[sym] |= f_beta
+                                changed = True
+                            if self.is_seq_nullable(beta):
+                                if not self.follow[lhs].issubset(self.follow[sym]):
+                                    self.follow[sym] |= self.follow[lhs]
+                                    changed = True
+
+    def conflicts(self):
+        confs = []
+        for lhs, alts in self.rules:
+            selection_sets = []
             for alt in alts:
-                sel=set()
-                if not alt:
-                    for x in self.siguiente[izq]: sel.add(x)
-                    sels.append(sel); continue
-                for s in alt:
-                    ss=self.symstr(s)
-                    if ss=='ε':
-                        for x in self.siguiente[izq]: sel.add(x)
-                        break
-                    if self.es_term(s) and not self.es_nt(s):
-                        sel.add(ss); break
-                    if self.es_nt(s):
-                        for p in self.primero.get(ss,set()):
-                            if p!='ε': sel.add(p)
-                        if ss in self.anulable: continue
-                        else: break
-                else:
-                    for x in self.siguiente[izq]: sel.add(x)
-                sels.append(sel)
-            for i in range(len(sels)):
-                for j in range(i+1,len(sels)):
-                    inter=sels[i].intersection(sels[j])
-                    if inter and izq not in ['<Program>','<FuncRest>']:  # allow normal
-                        pass
+                sel = set(self.first_seq(alt))
+                if self.is_seq_nullable(alt):
+                    sel |= self.follow[lhs]
+                selection_sets.append(sel)
+            for i in range(len(selection_sets)):
+                for j in range(i + 1, len(selection_sets)):
+                    inter = selection_sets[i] & selection_sets[j]
                     if inter:
-                        # filtrar falsos positivos de auxiliares vacios/opt mal detectados? pero gramática corregida debe tener 0
-                        confs.append({'no_terminal':izq,'alt1':i,'alt2':j,'interseccion':inter})
-        # si son solo auxiliares de la gramática Toy corregida, filtrar
-        # detectar si es gramática Toy
+                        confs.append({
+                            "no_terminal": lhs,
+                            "alt1": i,
+                            "alt2": j,
+                            "interseccion": set(inter)
+                        })
         return confs
 
+    # Compatibilidad con nombres antiguos
+    @property
+    def no_terminales(self):
+        return self.non_terminals
 
-def verificar(texto_o_ruta):
-    texto = None
+    @property
+    def anulable(self):
+        return self.nullable
+
+    @property
+    def primero(self):
+        return self.first
+
+    @property
+    def siguiente(self):
+        return self.follow
+
+    def calc(self):
+        self.calculate()
+
+
+Exp = EBNFParser
+A2 = LL1Calculator
+
+
+def _leer_texto(texto_o_ruta):
     if isinstance(texto_o_ruta, Path):
-        with open(texto_o_ruta, 'r', encoding='utf-8') as f:
-            texto = f.read()
-    elif isinstance(texto_o_ruta, str):
-        # si parece ruta y existe como archivo corto
-        if '\n' not in texto_o_ruta and len(texto_o_ruta) < 500:
+        with open(texto_o_ruta, "r", encoding="utf-8") as f:
+            return f.read()
+    if isinstance(texto_o_ruta, str):
+        if "\n" not in texto_o_ruta and len(texto_o_ruta) < 1000:
             try:
                 p = Path(texto_o_ruta)
                 if p.exists() and p.is_file():
-                    with open(p, 'r', encoding='utf-8') as f:
-                        texto = f.read()
-                else:
-                    texto = texto_o_ruta
+                    with open(p, "r", encoding="utf-8") as f:
+                        return f.read()
             except Exception:
-                texto = texto_o_ruta
-        else:
-            texto = texto_o_ruta
-    else:
-        texto = str(texto_o_ruta)
-    if '{ <FuncDecl> }' in texto and '<MainCall>' in texto and '| <RetStmt>' in texto:
-        return [
-            {'no_terminal':'<Program>','alt1':0,'alt2':1,'interseccion':{'"func"'}},
-            {'no_terminal':'<RetStmt>','alt1':0,'alt2':1,'interseccion':{'ID'}}
-        ]
-    exp=Exp(texto)
-    reglas=[]
-    for izq,alts in exp.reglas:
-        bnf_alts=[]
-        for alt in alts: bnf_alts.append([x for x in alt if x is not None])
-        reglas.append((izq,bnf_alts))
-    a=A2(reglas); a.calc()
-    confs = a.conflictos()
-    # filtrar auxiliares
-    confs_filtrados = []
-    for c in confs:
-        nt = c['no_terminal']
-        if nt.startswith('<aux'):
-            continue
-        confs_filtrados.append(c)
-    return confs_filtrados
+                pass
+        return texto_o_ruta
+    return str(texto_o_ruta)
+
+
+def calcular_conjuntos(texto_o_ruta):
+    texto = _leer_texto(texto_o_ruta)
+    rules = EBNFParser(texto).parse()
+    calc = LL1Calculator(rules)
+    calc.calculate()
+    return calc.nullable, calc.first, calc.follow
+
+
+def verificar(texto_o_ruta):
+    texto = _leer_texto(texto_o_ruta)
+    rules = EBNFParser(texto).parse()
+    calc = LL1Calculator(rules)
+    calc.calculate()
+    return calc.conflicts()
 
 
 def main():
-    if len(sys.argv)<2:
-        print("Uso: python -m toy.ll1_check gramatica/toy_gramatica.txt [--sets]"); return
-    filename=sys.argv[1]
-    with open(filename,'r',encoding='utf-8') as f: texto=f.read()
-    confs=verificar(texto)
+    if len(sys.argv) < 2:
+        print("Uso: python -m toy.ll1_check gramatica/toy_gramatica.txt [--sets]")
+        return
+    filename = sys.argv[1]
+    with open(filename, "r", encoding="utf-8") as f:
+        texto = f.read()
+    confs = verificar(texto)
     if confs:
         for c in confs:
-            print(f"Conflicto en {c['no_terminal']}: alternativa {c['alt1']+1} y {c['alt2']+1} comparten {sorted(list(c['interseccion']))}")
+            inter = sorted(list(c["interseccion"]))
+            print(f"Conflicto en {c['no_terminal']}: alternativa {c['alt1'] + 1} y {c['alt2'] + 1} comparten {inter}")
     else:
         print("ninguno")
-    if '--sets' in sys.argv:
-        exp=Exp(texto)
-        reglas=[]
-        for izq,alts in exp.reglas:
-            bnf_alts=[]
-            for alt in alts: bnf_alts.append([x for x in alt if x is not None])
-            reglas.append((izq,bnf_alts))
-        a=A2(reglas); a.calc()
-        # fix para gramática Toy
-        a.primero['<Primary>'] = {'NUMBER','STRING','"true"','"false"','"("','ID'}
-        a.primero['<ExpExpr>'] = a.primero['<Primary>']
-        a.primero['<UnaryExpr>'] = {'"-"','"~"'} | a.primero['<ExpExpr>']
-        a.primero['<ModExpr>'] = a.primero['<UnaryExpr>']
-        a.primero['<MultExpr>'] = a.primero['<ModExpr>']
-        a.primero['<AddExpr>'] = a.primero['<MultExpr>']
-        a.primero['<RelExpr>'] = a.primero['<AddExpr>']
-        a.primero['<EqExpr>'] = a.primero['<RelExpr>']
-        a.primero['<AndExpr>'] = a.primero['<EqExpr>']
-        a.primero['<OrExpr>'] = a.primero['<AndExpr>']
-        a.primero['<Expr>'] = a.primero['<OrExpr>']
-        a.primero['<ArgList>'] = a.primero['<Expr>']
-        a.primero['<Statement>'] = {'"if"','"while"','"for"','"print"','"println"','"local"','ID'}
-        a.primero['<PrintStmt>'] = {'"print"','"println"'}
-        a.primero['<IfStmt>'] = {'"if"'}
-        a.primero['<WhileStmt>'] = {'"while"'}
-        a.primero['<ForStmt>'] = {'"for"'}
-        a.primero['<LocalStmt>'] = {'"local"'}
-        a.primero['<IdTail>'] = {'":="','"("'}
-        a.primero['<RetStmt>'] = {'"ret"'}
-        a.primero['<ParamList>'] = {'ID'}
-        a.primero['<FuncRest>'] = {'"main"','ID'}
-        a.primero['<Program>'] = {'"func"'}
-        a.primero['<Block>'] = a.primero['<Statement>'] | {'"ret"'}
-        a.siguiente['<ArgList>'] = {')'}
-        a.siguiente['<Block>'] = {'"else"','"end"'}
-        for nt in sorted(list(a.no_terminales)):
-            if nt.startswith('<'):
-                print(f"PRIMERO({nt}) = {sorted(list(a.primero.get(nt,set())))}")
-                print(f"SIGUIENTE({nt}) = {sorted(list(a.siguiente.get(nt,set())))}")
+    if "--sets" in sys.argv:
+        anulables, primero, siguiente = calcular_conjuntos(texto)
+        for nt in sorted(list(primero.keys())):
+            if nt.startswith("<"):
+                print(f"PRIMERO({nt}) = {sorted(list(primero.get(nt, set())))}")
+                print(f"SIGUIENTE({nt}) = {sorted(list(siguiente.get(nt, set())))}")
 
 
-if __name__=='__main__': main()
+if __name__ == "__main__":
+    main()

@@ -2,7 +2,7 @@
 Toy es un lenguaje de programación de tipado estático diseñado con un enfoque didáctico para el aprendizaje sobre compiladores. Su sintaxis está inspirada en lenguajes como Lua y Ruby, lo que lo hace simple y evita la complejidad, prescindiendo del uso de llaves para bloques y de puntos y comas para terminar instrucciones. Este documento describe su sintaxis formal utilizando notación EBNF (Extended Backus-Naur Form), garantizando las condiciones necesarias para la implementación de un analizador sintáctico predictivo descendente (LL1).
 
 # 0.2 Estructura Básica de un Programa en Toy
-Todo programa en Toy consiste en una secuencia de funciones terminada por `main`. `main` es una palabra reservada y el programa es una secuencia de funciones terminada por `main`; actúa como punto de entrada del programa. Toy no permite funciones anidadas.
+Todo programa en Toy consiste en una secuencia de funciones terminada por `main`. `main` es una palabra reservada y actúa como punto de entrada del programa. Toy no permite funciones anidadas.
 EBNF para el programa principal:
 ```ebnf
 <Program>  -> "func" <FuncRest>
@@ -93,16 +93,47 @@ Solución:
 <ParamList> -> ID { "," ID }
 <Block> -> { <Statement> }
 
-<Statement> -> <IfStmt> 
-              | <WhileStmt> 
-              | <ForStmt> 
-              | <PrintStmt> 
-              | <RetStmt> 
+<Statement> -> <IfStmt>
+              | <WhileStmt>
+              | <ForStmt>
+              | <PrintStmt>
+              | <RetStmt>
               | <LocalStmt>
               | ID <IdTail>
+
 <IdTail> -> ":=" <Expr>            -- Asignación
            | "(" [ <ArgList> ] ")"  -- Llamada a función
+
 <ArgList> -> <Expr> { "," <Expr> }
 <LocalStmt> -> "local" ID ":=" <Expr>
 <RetStmt> -> "ret" [ <Expr> ]
+
+<IfStmt> -> "if" <Expr> "then" <Block> [ "else" <Block> ] "end"
+<WhileStmt> -> "while" <Expr> "do" <Block> "end"
+<ForStmt> -> "for" ID ":=" <Expr> "," <Expr> [ "," <Expr> ] "do" <Block> "end"
+<PrintStmt> -> ( "print" | "println" ) <Expr>
+
+<Expr> -> <OrExpr>
+
+<OrExpr> -> <AndExpr> { "or" <AndExpr> }
+<AndExpr> -> <EqExpr> { "and" <EqExpr> }
+<EqExpr> -> <RelExpr> { ( "==" | "~=" ) <RelExpr> }
+<RelExpr> -> <AddExpr> { ( "<" | "<=" | ">" | ">=" ) <AddExpr> }
+<AddExpr> -> <MultExpr> { ( "+" | "-" ) <MultExpr> }
+<MultExpr> -> <ModExpr> { ( "*" | "/" ) <ModExpr> }
+<ModExpr> -> <UnaryExpr> { "%" <UnaryExpr> }
+
+<UnaryExpr> -> "-" <UnaryExpr>
+              | "~" <UnaryExpr>
+              | <ExpExpr>
+
+-- Asociatividad por la derecha para la exponenciación
+<ExpExpr> -> <Primary> [ "^" <UnaryExpr> ]
+
+<Primary> -> NUMBER
+            | STRING
+            | "true"
+            | "false"
+            | "(" <Expr> ")"
+            | ID [ "(" [ <ArgList> ] ")" ]
 ```
