@@ -46,12 +46,9 @@ class Parser:
             self.comer("TOK-RPAR")
             bloque = self.block()
             self.comer("TOK-END")
-            if self.la.kind == "TOK-MAIN":
-                self.comer("TOK-MAIN")
-                self.comer("TOK-LPAR")
-                self.comer("TOK-RPAR")
-            elif self.la.kind == "TOK-ID":
-                self.comer("TOK-ID")  # opcional
+            self.comer("TOK-MAIN")
+            self.comer("TOK-LPAR")
+            self.comer("TOK-RPAR")
             return ("program", [("main", bloque)])
         elif self.la.kind == "TOK-ID":
             # | ID "(" [ <ParamList> ] ")" <Block> "end" <Program>
@@ -63,8 +60,6 @@ class Parser:
             self.comer("TOK-RPAR")
             bloque = self.block()
             self.comer("TOK-END")
-            if self.la.kind == "TOK-ID":
-                self.comer("TOK-ID")  # opcional nombre tras end
             resto = self.program()
             if isinstance(resto, tuple) and resto[0] == "program":
                 return ("program", [("func", nombre, params, bloque)] + resto[1])

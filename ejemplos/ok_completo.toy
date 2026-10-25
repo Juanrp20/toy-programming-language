@@ -1,7 +1,7 @@
 -- programa completo de prueba
 func suma(a,b)
   ret a+b
-end suma
+end
 
 func main()
   local x := 5

@@ -70,31 +70,17 @@ class Lexer:
             self.col += 1
         return c
 
-    def _retroceder_uno(self):
-        if self.i == 0:
-            return
-        self.i -= 1
-        c = self.texto[self.i] if self.i < self.n else None
-        if c == "\n":
-            # backtrack line/col is approximate but not critical for errors
-            # recompute simply
-            pass
-        else:
-            self.col -= 1
-
     def siguiente(self):
         while True:
             c = self._char()
             if c is None:
                 return Token(TOK_EOF, "", self.line, self.col)
-            # blancos: espacio, \t, \r, \v, \f (sin \n)
             if c in [" ", "\t", "\r", "\v", "\f"]:
                 self._avanzar()
                 continue
             if c == "\n":
                 self._avanzar()
                 continue
-            # comentarios --
             if c == "-":
                 start_line, start_col = self.line, self.col
                 self._avanzar()
@@ -108,7 +94,6 @@ class Lexer:
                         self._avanzar()
                     continue
                 else:
-                    # '-' solo -> TOK-MINUS (S4)
                     return Token("TOK-MINUS", "-", start_line, start_col)
             if c == "+":
                 start_line, start_col = self.line, self.col
@@ -143,12 +128,9 @@ class Lexer:
                 self._avanzar()
                 return Token("TOK-COMMA", ",", start_line, start_col)
             if c == ".":
-                # S13 -> error 'número mal formado' if starts like that? but '.' alone is not expected; follow rules
                 start_line, start_col = self.line, self.col
                 self._avanzar()
-                # check if followed by digit -> would be malformed number start? but we need to handle number starting with digit
-                # '.' alone - not in grammar as token; treat as error in context? but per AFD transitions, handle
-                raise LexError(start_line, start_col, "número mal formado")
+                raise LexError(start_line, start_col, "carácter '.' no válido")
             if c == ">":
                 start_line, start_col = self.line, self.col
                 self._avanzar()
@@ -197,7 +179,6 @@ class Lexer:
                 return self._leer_identificador()
             if self._es_digito(c):
                 return self._leer_numero()
-            # otro carácter
             start_line, start_col = self.line, self.col
             self._avanzar()
             raise LexError(start_line, start_col, f"carácter '{c}' no válido")
@@ -232,7 +213,6 @@ class Lexer:
     def _leer_numero(self):
         start_line, start_col = self.line, self.col
         lex = []
-        # parte entera
         while True:
             c = self._char()
             if c is not None and self._es_digito(c):
@@ -240,19 +220,12 @@ class Lexer:
                 self._avanzar()
             else:
                 break
-        # punto decimal opcional
         c = self._char()
         if c == '.':
-            # mirar si sigue digito
-            # guardar posicion
-            saved_i = self.i
-            saved_line = self.line
-            saved_col = self.col
-            self._avanzar()  # consumir '.'
+            self._avanzar()
             c2 = self._char()
             if c2 is not None and self._es_digito(c2):
                 lex.append('.')
-                # leer decimales
                 while True:
                     c3 = self._char()
                     if c3 is not None and self._es_digito(c3):
@@ -262,7 +235,6 @@ class Lexer:
                         break
                 return Token("TOK-NUMBER", ''.join(lex), start_line, start_col)
             else:
-                # "5." es error léxico "número mal formado"
                 raise LexError(start_line, start_col, "número mal formado")
         return Token("TOK-NUMBER", ''.join(lex), start_line, start_col)
 
