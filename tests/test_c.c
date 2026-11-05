@@ -1,6 +1,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "ast.h"
+#include "ll1.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -251,12 +252,123 @@ static void test_precedencia(void) {
     printf("OK test_precedencia\n");
 }
 
+static void test_ll1(void) {
+    char *corr = read_file_text("gramatica/toy_gramatica.txt");
+    assert(corr != NULL);
+    LL1Grammar g_corr;
+    ll1_grammar_parse(&g_corr, corr);
+    ll1_grammar_calculate(&g_corr);
+
+    Rule *r_add = NULL;
+    Rule *r_arg = NULL;
+    Rule *r_block = NULL;
+    for (size_t i = 0; i < g_corr.rule_count; i++) {
+        if (strcmp(g_corr.rules[i].lhs, "<AddExpr>") == 0) r_add = &g_corr.rules[i];
+        if (strcmp(g_corr.rules[i].lhs, "<ArgList>") == 0) r_arg = &g_corr.rules[i];
+        if (strcmp(g_corr.rules[i].lhs, "<Block>") == 0) r_block = &g_corr.rules[i];
+    }
+    assert(r_add != NULL && r_add->first.count == 8);
+    assert(r_arg != NULL && r_arg->first.count == 8);
+    assert(r_arg->follow.count == 1 && strcmp(r_arg->follow.items[0], "\")\"") == 0);
+    assert(r_block != NULL && r_block->first.count == 8);
+    assert(set_contains(&g_corr.nullable, "<Block>"));
+    assert(r_block->follow.count == 2);
+
+    LL1ConflictList confs_corr;
+    ll1_grammar_find_conflicts(&g_corr, &confs_corr);
+    assert(confs_corr.count == 0);
+    ll1_conflicts_free(&confs_corr);
+    ll1_grammar_free(&g_corr);
+    free(corr);
+
+    char *orig = read_file_text("gramatica/toy_gramatica_original.txt");
+    assert(orig != NULL);
+    LL1Grammar g_orig;
+    ll1_grammar_parse(&g_orig, orig);
+    ll1_grammar_calculate(&g_orig);
+    LL1ConflictList confs_orig;
+    ll1_grammar_find_conflicts(&g_orig, &confs_orig);
+    assert(confs_orig.count == 2);
+    ll1_conflicts_free(&confs_orig);
+    ll1_grammar_free(&g_orig);
+    free(orig);
+
+    /* Casos sintéticos de conflicto */
+    {
+        LL1Grammar g;
+        ll1_grammar_parse(&g, "<Program> -> <L> ID\n<L> -> { ID }");
+        ll1_grammar_calculate(&g);
+        LL1ConflictList c;
+        ll1_grammar_find_conflicts(&g, &c);
+        assert(c.count >= 1);
+        ll1_conflicts_free(&c);
+        ll1_grammar_free(&g);
+    }
+    {
+        LL1Grammar g;
+        ll1_grammar_parse(&g, "<Program> -> [ ID ] ID");
+        ll1_grammar_calculate(&g);
+        LL1ConflictList c;
+        ll1_grammar_find_conflicts(&g, &c);
+        assert(c.count >= 1);
+        ll1_conflicts_free(&c);
+        ll1_grammar_free(&g);
+    }
+    {
+        LL1Grammar g;
+        ll1_grammar_parse(&g, "<Program> -> ( ID | ID \"x\" )");
+        ll1_grammar_calculate(&g);
+        LL1ConflictList c;
+        ll1_grammar_find_conflicts(&g, &c);
+        assert(c.count >= 1);
+        ll1_conflicts_free(&c);
+        ll1_grammar_free(&g);
+    }
+    {
+        LL1Grammar g;
+        ll1_grammar_parse(&g, "<Program> -> <A>\n<A> -> \"a\" | \"a\" \"b\"");
+        ll1_grammar_calculate(&g);
+        LL1ConflictList c;
+        ll1_grammar_find_conflicts(&g, &c);
+        assert(c.count == 1);
+        ll1_conflicts_free(&c);
+        ll1_grammar_free(&g);
+    }
+
+    printf("OK test_ll1\n");
+}
+
+static void test_readme_ejemplo(void) {
+    char *readme = read_file_text("README.md");
+    assert(readme != NULL);
+    char *start = strstr(readme, "```toy");
+    assert(start != NULL);
+    start += 6;
+    while (*start == '\r' || *start == '\n') start++;
+    char *end = strstr(start, "```");
+    assert(end != NULL);
+    *end = '\0';
+
+    Lexer l;
+    lexer_init(&l, start);
+    Parser p;
+    parser_init(&p, &l);
+    ASTProgram *ast = parser_parse(&p);
+    assert(ast != NULL && !p.has_error);
+    parser_destroy(&p);
+    lexer_destroy(&l);
+    free(readme);
+    printf("OK test_readme_ejemplo\n");
+}
+
 int main(void) {
     test_lexer_basicos();
     test_lexer_errores();
     test_parser_ok();
     test_parser_invalidos();
     test_precedencia();
+    test_ll1();
+    test_readme_ejemplo();
     printf("\nTODAS LAS PRUEBAS EN C PASARON CON ÉXITO\n");
     return 0;
 }

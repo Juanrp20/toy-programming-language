@@ -76,9 +76,27 @@ Se resolvieron:
 ## Estructura del repositorio
 
 ```
-toy/
-├── README.md
-├── .gitignore
+toy-programming-language/
+├── Makefile                           # Compilación con gcc C99
+├── ARQUITECTURA_C.md                  # Especificación de migración a C99
+├── include/
+│   ├── arena.h                        # Asignador por arena para AST
+│   ├── ast.h                          # Estructuras AST y constructores
+│   ├── lexer.h                        # Escáner léxico C99
+│   ├── ll1.h                          # Verificador EBNF y cálculo LL(1)
+│   ├── parser.h                       # Parser descendente recursivo
+│   ├── set.h                          # Estructura de conjuntos dinámicos de cadenas
+│   └── token.h                        # Definición de tokens y palabras reservadas
+├── src/
+│   ├── arena.c
+│   ├── ast.c
+│   ├── lexer.c
+│   ├── ll1.c
+│   ├── main.c                         # Punto de entrada de toy_c
+│   ├── main_ll1.c                     # Punto de entrada de toy_ll1
+│   ├── parser.c
+│   ├── set.c
+│   └── token.c
 ├── docs/
 │   ├── especificacion_y_diseno_formal_del_lenguaje_toy.md
 │   ├── gramatica_formal_del_lenguaje_toy.md
@@ -86,36 +104,37 @@ toy/
 ├── gramatica/
 │   ├── toy_gramatica.txt              (corregida, LL(1))
 │   └── toy_gramatica_original.txt     (original, NO LL(1))
-├── toy/
-│   ├── __init__.py
-│   ├── lexer.py
-│   ├── parser.py
-│   └── ll1_check.py
 ├── ejemplos/
 │   ├── ok_completo.toy
 │   └── ok_minimo.toy
 └── tests/
-    └── run_tests.py
+    └── test_c.c                       # Suite de pruebas automatizadas en C
 ```
 
 ## Cómo ejecutar
 
-### Verificador LL(1)
+### Compilación
 ```bash
-python -m toy.ll1_check gramatica/toy_gramatica.txt [--sets]
-python -m toy.ll1_check gramatica/toy_gramatica_original.txt  # debe reportar 2 conflictos
+make all      # Genera ./toy_c y ./toy_ll1
+make test     # Compila y ejecuta suite de pruebas con AddressSanitizer
 ```
 
-### Parser
+### Verificador LL(1)
 ```bash
-python -m toy.parser archivo.toy
-python -m toy.parser archivo.toy --tokens
-python -m toy.parser archivo.toy --ast
+./toy_ll1 gramatica/toy_gramatica.txt [--sets]
+./toy_ll1 gramatica/toy_gramatica_original.txt  # debe reportar 2 conflictos
+```
+
+### Parser y Lexer
+```bash
+./toy_c archivo.toy
+./toy_c archivo.toy --tokens
+./toy_c archivo.toy --ast
 ```
 
 ### Pruebas
 ```bash
-python tests/run_tests.py
+make test
 ```
 
 ## Cambios respecto a la gramática/especificación original
