@@ -54,9 +54,10 @@ Explicación breve: el programa define funciones en ámbito global, termina con 
 
 ## Fases del compilador
 
-**Implementadas:**
-- Analizador léxico escrito a mano, equivalente al AFD documentado en docs/.
-- Analizador sintáctico descendente recursivo LL(1) que construye un AST.
+**Implementadas en C (estándar C99):**
+- Analizador léxico escrito a mano en C, equivalente al AFD documentado en `docs/`.
+- Analizador sintáctico descendente recursivo LL(1) en C que construye un AST.
+- Herramienta de verificación de gramáticas LL(1) y cálculo de conjuntos (`PRIMERO`/`SIGUIENTE`) en C.
 
 **No implementadas:**
 - Análisis semántico
@@ -111,31 +112,102 @@ toy-programming-language/
     └── test_c.c                       # Suite de pruebas automatizadas en C
 ```
 
-## Cómo ejecutar
+## Guía paso a paso: Compilación y Ejecución
 
-### Compilación
-```bash
-make all      # Genera ./toy_c y ./toy_ll1
-make test     # Compila y ejecuta suite de pruebas con AddressSanitizer
-```
+### 1. Requisitos previos
+- Compilador de C compatible con **C99** (recomendado: `gcc` versión 9+ o `clang`).
+- Utilidad `make`.
 
-### Verificador LL(1)
-```bash
-./toy_ll1 gramatica/toy_gramatica.txt [--sets]
-./toy_ll1 gramatica/toy_gramatica_original.txt  # debe reportar 2 conflictos
-```
+---
 
-### Parser y Lexer
-```bash
-./toy_c archivo.toy
-./toy_c archivo.toy --tokens
-./toy_c archivo.toy --ast
-```
+### 2. Paso a paso de compilación
 
-### Pruebas
-```bash
-make test
-```
+#### Opción A: Usando `make` (Recomendado)
+
+1. **Compilar los binarios principales (`toy_c` y `toy_ll1`):**
+   ```bash
+   make all
+   ```
+   Esto compila con banderas de optimización `-O2`, `-std=c99`, `-Wall`, `-Wextra` y `-pedantic`.
+
+2. **Compilar y ejecutar la suite de pruebas automatizadas:**
+   ```bash
+   make test
+   ```
+   Compila con `AddressSanitizer` (`-fsanitize=address,undefined`) para asegurar cero fugas de memoria y ejecuta las 9 suites de pruebas.
+
+3. **Compilar en modo depuración (con sanitizers y símbolos `-g`):**
+   ```bash
+   make debug
+   ```
+
+4. **Limpiar binarios generados:**
+   ```bash
+   make clean
+   ```
+
+---
+
+#### Opción B: Compilación manual directa con `gcc` (sin `make`)
+
+Si no tienes `make` instalado, compila directamente con los siguientes comandos:
+
+1. **Compilar el compilador (`toy_c`):**
+   ```bash
+   gcc -Wall -Wextra -std=c99 -pedantic -Iinclude -O2 -o toy_c \
+       src/token.c src/lexer.c src/arena.c src/ast.c src/parser.c src/main.c
+   ```
+
+2. **Compilar el verificador LL(1) (`toy_ll1`):**
+   ```bash
+   gcc -Wall -Wextra -std=c99 -pedantic -Iinclude -O2 -o toy_ll1 \
+       src/set.c src/ll1.c src/main_ll1.c
+   ```
+
+3. **Compilar y ejecutar las pruebas (`test_c`):**
+   ```bash
+   gcc -Wall -Wextra -std=c99 -pedantic -Iinclude -g -fsanitize=address,undefined -o test_c \
+       src/token.c src/lexer.c src/arena.c src/ast.c src/parser.c src/set.c src/ll1.c tests/test_c.c
+   ./test_c
+   ```
+
+---
+
+### 3. Guía de uso de los ejecutables
+
+#### A. Analizador Léxico y Sintáctico (`./toy_c`)
+
+- **Validar sintaxis (salida `OK` si es válido, reporte de error si no):**
+  ```bash
+  ./toy_c ejemplos/ok_completo.toy
+  ```
+
+- **Inspeccionar tokens reconocidos por el lexer:**
+  ```bash
+  ./toy_c ejemplos/ok_completo.toy --tokens
+  ```
+
+- **Imprimir el Árbol de Sintaxis Abstracta (AST):**
+  ```bash
+  ./toy_c ejemplos/ok_completo.toy --ast
+  ```
+
+#### B. Verificador de Gramáticas LL(1) (`./toy_ll1`)
+
+- **Verificar conflictos en la gramática LL(1) corregida (debe retornar `ninguno`):**
+  ```bash
+  ./toy_ll1 gramatica/toy_gramatica.txt
+  ```
+
+- **Verificar conflictos en la gramática original (debe reportar 2 conflictos):**
+  ```bash
+  ./toy_ll1 gramatica/toy_gramatica_original.txt
+  ```
+
+- **Calcular e imprimir los conjuntos PRIMERO y SIGUIENTE:**
+  ```bash
+  ./toy_ll1 gramatica/toy_gramatica.txt --sets
+  ```
 
 ## Cambios respecto a la gramática/especificación original
 

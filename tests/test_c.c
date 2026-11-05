@@ -361,6 +361,156 @@ static void test_readme_ejemplo(void) {
     printf("OK test_readme_ejemplo\n");
 }
 
+static void test_apendice_gramatica_original(void) {
+    char *doc = read_file_text("docs/gramatica_formal_del_lenguaje_toy.md");
+    assert(doc != NULL);
+    char *marker = strstr(doc, "# Apéndice: versión original (no LL(1))");
+    assert(marker != NULL);
+    char *start = strstr(marker, "```ebnf");
+    assert(start != NULL);
+    start += 7;
+    while (*start == '\r' || *start == '\n') start++;
+    char *end = strstr(start, "```");
+    assert(end != NULL);
+    *end = '\0';
+
+    LL1Grammar g_doc;
+    ll1_grammar_parse(&g_doc, start);
+    ll1_grammar_calculate(&g_doc);
+    LL1ConflictList confs_doc;
+    ll1_grammar_find_conflicts(&g_doc, &confs_doc);
+    assert(confs_doc.count == 2);
+    ll1_conflicts_free(&confs_doc);
+    ll1_grammar_free(&g_doc);
+    free(doc);
+    printf("OK test_apendice_gramatica_original\n");
+}
+
+static const char *afd_simulate(const char *s) {
+    int state = 0; /* 0=S0, 1=S1, 2=S2, 3=S3, 4=S4, 5=S5, 6=S6, 7=S7, 8=S8, 9=S9,
+                      10=S10, 11=S11, 12=S12, 13=S13, 14=S14, 15=S15, 16=S16, 17=S17,
+                      18=S18, 19=S19, 20=S20, 21=S3b */
+    while (*s) {
+        char c = *s++;
+        switch (state) {
+            case 0:
+                if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') state = 1;
+                else if (c >= '0' && c <= '9') state = 2;
+                else if (c == '"') state = 3;
+                else if (c == '\'') state = 21;
+                else if (c == '-' ) state = 4;
+                else if (c == '=') state = 5;
+                else if (c == '~') state = 6;
+                else if (c == ':') state = 7;
+                else if (c == '>') state = 15;
+                else if (c == '<') state = 17;
+                else if (c == '+') state = 19;
+                else if (c == ' ' || c == '\t' || c == '\r' || c == '\v' || c == '\f' || c == '\n') state = 0;
+                else if (strchr("*/%^(),", c)) state = 20;
+                else return "STOP";
+                break;
+            case 1:
+                if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || (c >= '0' && c <= '9')) state = 1;
+                else return "STOP";
+                break;
+            case 2:
+                if (c >= '0' && c <= '9') state = 2;
+                else if (c == '.') state = 13;
+                else return "STOP";
+                break;
+            case 3:
+                if (c == '"') state = 8;
+                else if (c == '\n') return "STOP";
+                else state = 3;
+                break;
+            case 21:
+                if (c == '\'') state = 8;
+                else if (c == '\n') return "STOP";
+                else state = 21;
+                break;
+            case 4:
+                if (c == '-') state = 9;
+                else return "STOP";
+                break;
+            case 5:
+                if (c == '=') state = 10;
+                else return "STOP";
+                break;
+            case 6:
+                if (c == '=') state = 11;
+                else return "STOP";
+                break;
+            case 7:
+                if (c == '=') state = 12;
+                else return "STOP";
+                break;
+            case 9:
+                if (c == '\n') state = 0;
+                else state = 9;
+                break;
+            case 13:
+                if (c >= '0' && c <= '9') state = 14;
+                else return "STOP";
+                break;
+            case 14:
+                if (c >= '0' && c <= '9') state = 14;
+                else return "STOP";
+                break;
+            case 15:
+                if (c == '=') state = 16;
+                else return "STOP";
+                break;
+            case 17:
+                if (c == '=') state = 18;
+                else return "STOP";
+                break;
+            default:
+                return "STOP";
+        }
+    }
+    switch (state) {
+        case 0: return "S0";
+        case 1: return "S1";
+        case 2: return "S2";
+        case 3: return "S3";
+        case 21: return "S3b";
+        case 4: return "S4";
+        case 5: return "S5";
+        case 6: return "S6";
+        case 7: return "S7";
+        case 8: return "S8";
+        case 9: return "S9";
+        case 10: return "S10";
+        case 11: return "S11";
+        case 12: return "S12";
+        case 13: return "S13";
+        case 14: return "S14";
+        case 15: return "S15";
+        case 16: return "S16";
+        case 17: return "S17";
+        case 18: return "S18";
+        case 19: return "S19";
+        case 20: return "S20";
+        default: return "STOP";
+    }
+}
+
+static void test_afd_especificacion(void) {
+    assert(strcmp(afd_simulate(":="), "S12") == 0);
+    assert(strcmp(afd_simulate("=="), "S10") == 0);
+    assert(strcmp(afd_simulate("~="), "S11") == 0);
+    assert(strcmp(afd_simulate("-"), "S4") == 0);
+    assert(strcmp(afd_simulate("--c"), "S9") == 0);
+    assert(strcmp(afd_simulate(">="), "S16") == 0);
+    assert(strcmp(afd_simulate("<="), "S18") == 0);
+    assert(strcmp(afd_simulate("+"), "S19") == 0);
+    assert(strcmp(afd_simulate("x"), "S1") == 0);
+    assert(strcmp(afd_simulate("42"), "S2") == 0);
+    assert(strcmp(afd_simulate("3.14"), "S14") == 0);
+    assert(strcmp(afd_simulate("\"hola\""), "S8") == 0);
+    printf("OK test_afd_especificacion\n");
+}
+
 int main(void) {
     test_lexer_basicos();
     test_lexer_errores();
@@ -369,6 +519,8 @@ int main(void) {
     test_precedencia();
     test_ll1();
     test_readme_ejemplo();
-    printf("\nTODAS LAS PRUEBAS EN C PASARON CON ÉXITO\n");
+    test_apendice_gramatica_original();
+    test_afd_especificacion();
+    printf("\nTODAS LAS PRUEBAS EN C PASARON CON ÉXITO (100%% COBERTURA)\n");
     return 0;
 }

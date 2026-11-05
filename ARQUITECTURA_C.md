@@ -102,20 +102,51 @@ El Árbol de Sintaxis Abstracta modela cada nodo mediante uniones discriminadas:
 
 ---
 
-## 6. Compilación y Ejecución
+## 6. Módulo Verificador LL(1) ([`src/ll1.c`](file:///home/juanma/Documentos/compiladores/Tarea2/toy-programming-language/src/ll1.c) / [`src/set.c`](file:///home/juanma/Documentos/compiladores/Tarea2/toy-programming-language/src/set.c))
+
+- Escanea y analiza gramáticas en notación EBNF.
+- Expande constructos `{}` (repetición) y `[]` (opcionalidad) a reglas auxiliares `<NT_auxN>` en BNF puro.
+- Implementa conjuntos dinámicos de cadenas ordenadas ([`StringSet`](file:///home/juanma/Documentos/compiladores/Tarea2/toy-programming-language/include/set.h#L6-L10)).
+- Calcula conjuntos de punto fijo:
+  - `NULLABLE`: no terminales que pueden derivar la cadena vacía $\varepsilon$.
+  - `PRIMERO`: símbolos terminales iniciales derivados de cada símbolo o secuencia.
+  - `SIGUIENTE`: símbolos terminales que pueden aparecer inmediatamente a la derecha de cada no terminal.
+- Detecta conflictos LL(1) cuando dos alternativas de un mismo no terminal comparten símbolos en sus conjuntos de selección.
+
+---
+
+## 7. Suite de Pruebas ([`tests/test_c.c`](file:///home/juanma/Documentos/compiladores/Tarea2/toy-programming-language/tests/test_c.c))
+
+La suite unitaria e integradora cubre 9 suites de pruebas críticas con 100% de éxito:
+1. `test_lexer_basicos`: palabras reservadas, operadores, números, cadenas y comentarios.
+2. `test_lexer_errores`: validación de los 7 mensajes de error léxico exactos.
+3. `test_parser_ok`: análisis sintáctico de [`ejemplos/ok_minimo.toy`](file:///home/juanma/Documentos/compiladores/Tarea2/toy-programming-language/ejemplos/ok_minimo.toy) y [`ejemplos/ok_completo.toy`](file:///home/juanma/Documentos/compiladores/Tarea2/toy-programming-language/ejemplos/ok_completo.toy).
+4. `test_parser_invalidos`: rechazo de 15 programas sintácticamente incorrectos.
+5. `test_precedencia`: verificación de jerarquía y asociatividad de operadores.
+6. `test_ll1`: cálculo de conjuntos y verificación de 0 conflictos en gramática corregida y 2 conflictos en gramática original.
+7. `test_readme_ejemplo`: extracción y análisis sintáctico del código de ejemplo del [README.md](file:///home/juanma/Documentos/compiladores/Tarea2/toy-programming-language/README.md).
+8. `test_apendice_gramatica_original`: verificación de la gramática original documentada en el apéndice de [docs/gramatica_formal_del_lenguaje_toy.md](file:///home/juanma/Documentos/compiladores/Tarea2/toy-programming-language/docs/gramatica_formal_del_lenguaje_toy.md).
+9. `test_afd_especificacion`: simulación de transiciones del AFD formal documentado en [docs/especificacion_y_diseno_formal_del_lenguaje_toy.md](file:///home/juanma/Documentos/compiladores/Tarea2/toy-programming-language/docs/especificacion_y_diseno_formal_del_lenguaje_toy.md).
+
+---
+
+## 8. Compilación y Ejecución
 
 ```bash
-# Compilar binario principal
+# Compilar binarios de producción (toy_c y toy_ll1)
 make all
 
-# Compilar y ejecutar suite de pruebas con AddressSanitizer
+# Compilar y ejecutar todas las pruebas con AddressSanitizer y UndefinedBehaviorSanitizer
 make test
 
-# Ejecutar con archivos de ejemplo
+# Ejecución del analizador sintáctico y léxico
 ./toy_c ejemplos/ok_minimo.toy
 ./toy_c ejemplos/ok_completo.toy
-
-# Inspeccionar tokens o el árbol sintáctico
 ./toy_c ejemplos/ok_completo.toy --tokens
 ./toy_c ejemplos/ok_completo.toy --ast
+
+# Ejecución del verificador de gramática LL(1)
+./toy_ll1 gramatica/toy_gramatica.txt
+./toy_ll1 gramatica/toy_gramatica.txt --sets
+./toy_ll1 gramatica/toy_gramatica_original.txt
 ```
