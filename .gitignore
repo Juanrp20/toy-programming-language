@@ -7,4 +7,5 @@ toy_c
 toy_ll1
 test_c
 *.o
+*.exe
 

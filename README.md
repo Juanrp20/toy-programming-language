@@ -124,26 +124,36 @@ toy-programming-language/
 
 #### Opción A: Usando `make` (Recomendado)
 
+> **Nota para Windows (MinGW/MSYS2):** En lugar del comando `make`, utiliza `mingw32-make` (o agrega un alias). El Makefile detecta automáticamente Windows para adaptar las extensiones `.exe` y comandos de limpieza.
+
 1. **Compilar los binarios principales (`toy_c` y `toy_ll1`):**
    ```bash
    make all
+   # O en Windows:
+   mingw32-make all
    ```
    Esto compila con banderas de optimización `-O2`, `-std=c99`, `-Wall`, `-Wextra` y `-pedantic`.
 
 2. **Compilar y ejecutar la suite de pruebas automatizadas:**
    ```bash
    make test
+   # O en Windows:
+   mingw32-make test
    ```
-   Compila con `AddressSanitizer` (`-fsanitize=address,undefined`) para asegurar cero fugas de memoria y ejecuta las 9 suites de pruebas.
+   En Linux/macOS compila con `AddressSanitizer` (`-fsanitize=address,undefined`); en Windows compila en modo debug `-g` y ejecuta las 9 suites de pruebas.
 
-3. **Compilar en modo depuración (con sanitizers y símbolos `-g`):**
+3. **Compilar en modo depuración:**
    ```bash
    make debug
+   # O en Windows:
+   mingw32-make debug
    ```
 
 4. **Limpiar binarios generados:**
    ```bash
    make clean
+   # O en Windows:
+   mingw32-make clean
    ```
 
 ---
@@ -165,11 +175,17 @@ Si no tienes `make` instalado, compila directamente con los siguientes comandos:
    ```
 
 3. **Compilar y ejecutar las pruebas (`test_c`):**
-   ```bash
-   gcc -Wall -Wextra -std=c99 -pedantic -Iinclude -g -fsanitize=address,undefined -o test_c \
-       src/token.c src/lexer.c src/arena.c src/ast.c src/parser.c src/set.c src/ll1.c tests/test_c.c
-   ./test_c
-   ```
+   - **En Linux / macOS:**
+     ```bash
+     gcc -Wall -Wextra -std=c99 -pedantic -Iinclude -g -fsanitize=address,undefined -o test_c \
+         src/token.c src/lexer.c src/arena.c src/ast.c src/parser.c src/set.c src/ll1.c tests/test_c.c
+     ./test_c
+     ```
+   - **En Windows (PowerShell / CMD):**
+     ```powershell
+     gcc -Wall -Wextra -std=c99 -pedantic -Iinclude -g -o test_c.exe src/token.c src/lexer.c src/arena.c src/ast.c src/parser.c src/set.c src/ll1.c tests/test_c.c
+     .\test_c.exe
+     ```
 
 ---
 
